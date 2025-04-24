@@ -1,6 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { LanguageModelV1, generateText } from 'ai';
 import { getEncoding } from 'js-tiktoken';
+import { traceable } from "langsmith/traceable";
 
 import { RecursiveCharacterTextSplitter } from './text-splitter';
 
@@ -100,11 +101,17 @@ export function trimPrompt(
   return trimPrompt(trimmedPrompt, contextSize);
 }
 
-export async function callAIModel(prompt: string): Promise<string> {
-  const model = getModel();
-  const { text } = await generateText({
-    model,
-    prompt,
-  });
-  return text;
-}
+/**
+ * Calls the AI model with the given prompt and returns the response
+ */
+export const callAIModel = traceable(
+  async (prompt: string): Promise<string> => {
+    const model = getModel();
+    const { text } = await generateText({
+      model,
+      prompt,
+    });
+    return text;
+  },
+  { name: "callAIModel", run_type: "llm" }
+);

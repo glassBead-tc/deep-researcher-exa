@@ -1,53 +1,118 @@
 import { callAIModel } from '../deep-research/ai/providers';
 import { writeFinalReport, writeFinalAnswer } from '../deep-research/deep-research';
 import { synthesisSystemPrompt } from '../deep-research/prompt';
+import { traceable } from "langsmith/traceable";
 
 export type OutputMode = 'report' | 'answer';
 
-interface SynthesisInput {
+/**
+ * Input for the synthesis agent
+ */
+export interface SynthesisInput {
+  /** The mode of output to generate (report or answer) */
   mode: OutputMode;
+  /** The prompt from the user */
   prompt: string;
+  /** The original query from the user */
   originalQuery: string;
+  /** The learnings from the research */
   learnings: string[];
+  /** The URLs visited during research */
   visitedUrls?: string[];
-}
-
-export async function runSynthesisAgent({
-  mode,
-  prompt,
-  originalQuery,
-  learnings,
-  visitedUrls = [],
-}: SynthesisInput): Promise<string> {
-  try {
-    if (mode === 'report') {
-      // Pass the synthesisSystemPrompt to writeFinalReport
-      return await writeFinalReport({ prompt, originalQuery, learnings, visitedUrls });
-    }
-
-    if (mode === 'answer') {
-      // Pass the synthesisSystemPrompt to writeFinalAnswer
-      return await writeFinalAnswer({ prompt, originalQuery, learnings });
-    }
-
-    throw new Error(`Unknown synthesis mode: ${mode}`);
-  } catch (err: any) {
-    console.error('Synthesis agent failed:', err.message);
-    return `⚠️ Error generating ${mode}: ${err.message}`;
-  }
+  /** Options for report generation */
+  reportOptions?: {
+    /** Whether to include counterarguments in the report */
+    includeCounterarguments?: boolean;
+    /** The tone to use for the report */
+    tone?: 'academic' | 'formal' | 'informative';
+    /** The maximum length of the report in words */
+    maxLength?: number;
+  };
 }
 
 /**
- * Transforms an array of research learnings into cohesive, narrative text based on the given prompt.
- * This function takes bullet-point style research findings and synthesizes them into well-structured,
- * formal prose with logical paragraph organization and smooth transitions.
- *
- * @param learnings - Array of string learnings/insights to be synthesized
- * @param prompt - The user prompt providing context for the synthesis
- * @param options - Optional configuration parameters
- * @returns A Promise that resolves to a string containing the synthesized narrative
- * @throws Will throw an error if the AI model call fails
+ * Result of the synthesis process
  */
+export interface SynthesisResult {
+  /** The generated content (report or answer) */
+  content: string;
+  /** Metadata about the synthesis process */
+  metadata?: {
+    /** The answer derived from the learnings (for report mode) */
+    answer?: string;
+    /** The key findings that support the answer (for report mode) */
+    keyFindings?: string[];
+    /** The sources referenced in the report (for report mode) */
+    sources?: string[];
+    /** The time taken to generate the content in milliseconds */
+    generationTimeMs?: number;
+  };
+}
+
+/**
+ * Run the synthesis agent to generate a report or answer
+ *
+ * @param input - The synthesis input
+ * @returns The synthesis result
+ */
+export const runSynthesisAgent = traceable(
+  async (input: SynthesisInput): Promise<SynthesisResult> => {
+    const startTime = Date.now();
+    
+    try {
+      const { mode, prompt, originalQuery, learnings, visitedUrls = [], reportOptions } = input;
+      
+      if (mode === 'report') {
+        // Use the enhanced report generation functionality
+        const reportResult = await writeFinalReport({
+          prompt,
+          originalQuery,
+          learnings,
+          visitedUrls,
+          options: reportOptions
+        });
+        
+        // Return the result with metadata
+        return {
+          content: reportResult.reportMarkdown,
+          metadata: {
+            answer: reportResult.answer,
+            keyFindings: reportResult.keyFindings,
+            sources: reportResult.sources,
+            generationTimeMs: Date.now() - startTime
+          }
+        };
+      }
+
+      if (mode === 'answer') {
+        // Use the existing answer generation functionality
+        const answer = await writeFinalAnswer({ prompt, originalQuery, learnings });
+        
+        // Return the result with metadata
+        return {
+          content: answer,
+          metadata: {
+            generationTimeMs: Date.now() - startTime
+          }
+        };
+      }
+
+      throw new Error(`Unknown synthesis mode: ${mode}`);
+    } catch (err: any) {
+      console.error('Synthesis agent failed:', err.message);
+      
+      // Return an error result
+      return {
+        content: `⚠️ Error generating ${input.mode}: ${err.message}`,
+        metadata: {
+          generationTimeMs: Date.now() - startTime
+        }
+      };
+    }
+  },
+  { name: "runSynthesisAgent" }
+);
+
 /**
  * Configuration options for the synthesizeLearnings function
  */
@@ -87,40 +152,43 @@ const MAX_PROMPT_TOKENS = 8000;
  * @returns A Promise that resolves to a string containing the synthesized narrative
  * @throws Will throw an error if the AI model call fails
  */
-export async function synthesizeLearnings(
-  learnings: string[],
-  prompt: string,
-  options?: SynthesisOptions
-): Promise<string> {
-  try {
-    // Handle empty learnings array gracefully
-    if (!learnings || learnings.length === 0) {
-      return "No research findings to synthesize.";
-    }
+export const synthesizeLearnings = traceable(
+  async (
+    learnings: string[],
+    prompt: string,
+    options?: SynthesisOptions
+  ): Promise<string> => {
+    try {
+      // Handle empty learnings array gracefully
+      if (!learnings || learnings.length === 0) {
+        return "No research findings to synthesize.";
+      }
 
-    // Merge provided options with defaults
-    const mergedOptions = { ...DEFAULT_SYNTHESIS_OPTIONS, ...options };
-    
-    // For very large arrays, process in batches
-    if (learnings.length > mergedOptions.batchSize!) {
-      return processBatchedLearnings(learnings, prompt, mergedOptions);
-    }
+      // Merge provided options with defaults
+      const mergedOptions = { ...DEFAULT_SYNTHESIS_OPTIONS, ...options };
+      
+      // For very large arrays, process in batches
+      if (learnings.length > mergedOptions.batchSize!) {
+        return processBatchedLearnings(learnings, prompt, mergedOptions);
+      }
 
-    // Format learnings with XML tags
-    const formattedLearnings = learnings.map(learning => `<learning>${learning}</learning>`).join('\n');
-    
-    // Build the prompt using a structured approach
-    const completePrompt = buildSynthesisPrompt(prompt, formattedLearnings, mergedOptions);
-    
-    // Call the AI model with the constructed prompt
-    const synthesizedText = await callAIModel(completePrompt);
-    
-    return synthesizedText;
-  } catch (error: any) {
-    console.error('Error in synthesizeLearnings:', error.message);
-    throw new Error(`Failed to synthesize learnings: ${error.message}`);
-  }
-}
+      // Format learnings with XML tags
+      const formattedLearnings = learnings.map(learning => `<learning>${learning}</learning>`).join('\n');
+      
+      // Build the prompt using a structured approach
+      const completePrompt = buildSynthesisPrompt(prompt, formattedLearnings, mergedOptions);
+      
+      // Call the AI model with the constructed prompt
+      const synthesizedText = await callAIModel(completePrompt);
+      
+      return synthesizedText;
+    } catch (error: any) {
+      console.error('Error in synthesizeLearnings:', error.message);
+      throw new Error(`Failed to synthesize learnings: ${error.message}`);
+    }
+  },
+  { name: "synthesizeLearnings" }
+);
 
 /**
  * Builds a structured synthesis prompt with all necessary components
@@ -177,48 +245,51 @@ function buildSynthesisPrompt(
  * @param options - Synthesis options
  * @returns A combined synthesis of all batches
  */
-async function processBatchedLearnings(
-  learnings: string[],
-  prompt: string,
-  options: SynthesisOptions
-): Promise<string> {
-  const batchSize = options.batchSize || DEFAULT_SYNTHESIS_OPTIONS.batchSize!;
-  const batches: string[][] = [];
-  
-  // Split learnings into batches
-  for (let i = 0; i < learnings.length; i += batchSize) {
-    batches.push(learnings.slice(i, i + batchSize));
-  }
-  
-  // Process each batch
-  const batchResults: string[] = [];
-  for (let i = 0; i < batches.length; i++) {
-    const batchPrompt = `${prompt} (Part ${i + 1} of ${batches.length})`;
-    const batchLearnings = batches[i];
+const processBatchedLearnings = traceable(
+  async (
+    learnings: string[],
+    prompt: string,
+    options: SynthesisOptions
+  ): Promise<string> => {
+    const batchSize = options.batchSize || DEFAULT_SYNTHESIS_OPTIONS.batchSize!;
+    const batches: string[][] = [];
     
-    // Process this batch
-    const batchResult = await synthesizeLearnings(
-      batchLearnings,
-      batchPrompt,
-      { ...options, batchSize: Infinity } // Prevent recursive batching
+    // Split learnings into batches
+    for (let i = 0; i < learnings.length; i += batchSize) {
+      batches.push(learnings.slice(i, i + batchSize));
+    }
+    
+    // Process each batch
+    const batchResults: string[] = [];
+    for (let i = 0; i < batches.length; i++) {
+      const batchPrompt = `${prompt} (Part ${i + 1} of ${batches.length})`;
+      const batchLearnings = batches[i];
+      
+      // Process this batch
+      const batchResult = await synthesizeLearnings(
+        batchLearnings,
+        batchPrompt,
+        { ...options, batchSize: Infinity } // Prevent recursive batching
+      );
+      
+      batchResults.push(batchResult);
+    }
+    
+    // If we only have one batch result, return it directly
+    if (batchResults.length === 1) {
+      return batchResults[0];
+    }
+    
+    // Otherwise, synthesize the batch results into a final result
+    const combinedLearnings = batchResults.map((result, index) =>
+      `Part ${index + 1} of ${batchResults.length}: ${result}`
     );
     
-    batchResults.push(batchResult);
-  }
-  
-  // If we only have one batch result, return it directly
-  if (batchResults.length === 1) {
-    return batchResults[0];
-  }
-  
-  // Otherwise, synthesize the batch results into a final result
-  const combinedLearnings = batchResults.map((result, index) =>
-    `Part ${index + 1} of ${batchResults.length}: ${result}`
-  );
-  
-  return synthesizeLearnings(
-    combinedLearnings,
-    `${prompt} (Final synthesis of ${batches.length} parts)`,
-    { ...options, batchSize: Infinity } // Prevent recursive batching
-  );
-}
+    return synthesizeLearnings(
+      combinedLearnings,
+      `${prompt} (Final synthesis of ${batches.length} parts)`,
+      { ...options, batchSize: Infinity } // Prevent recursive batching
+    );
+  },
+  { name: "processBatchedLearnings" }
+);
