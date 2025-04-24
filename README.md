@@ -2,7 +2,7 @@
 
 ## 🔎 Advanced Research Tool Powered by [Exa.ai](https://exa.ai)
 
-![Deep Researcher](deep-researcher/app/opengraph-image.jpg)
+![Deep Researcher](https://github.com/glassBead-tc/deep-researcher-exa/blob/main/deep-researcher/public/exa-researcher.png)
 
 Deep Researcher is an open-source tool that performs in-depth research on any topic using Exa.ai's powerful search capabilities. It intelligently gathers and synthesizes information from across the web, presenting you with comprehensive insights and detailed reports.
 
