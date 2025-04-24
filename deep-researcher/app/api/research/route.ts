@@ -3,6 +3,7 @@ import { deepResearch } from '@/lib/deep-research/deep-research';
 import { synthesizeLearnings } from '@/lib/synthesis/synthesisAgent';
 import { writeFinalAnswer } from '@/lib/deep-research/deep-research';
 
+export const maxDuration = 300;
 export type ResearchResult = {
   answer: string;
   synthesis: string;
