@@ -1,11 +1,13 @@
-import Exa, { SearchResponse } from 'exa-js';
-import { generateObject } from 'ai';
-import { compact } from 'lodash-es';
-import pLimit from 'p-limit';
-import { z } from 'zod';
+import Exa, { SearchResponse } from "exa-js";
+import { generateObject } from "ai";
+import { compact } from "lodash-es";
+import pLimit from "p-limit";
+import { z } from "zod";
 
-import { getModel, trimPrompt } from './ai/providers';
-import { systemPrompt } from './prompt';
+import { getModel, trimPrompt } from "./ai/providers";
+import { systemPrompt } from "./prompt";
+import { traceable } from "langsmith/traceable";
+import { wrapOpenAI } from "langsmith/wrappers";
 
 function log(...args: any[]) {
   console.log(...args);
@@ -176,131 +178,147 @@ export async function writeFinalAnswer({
   return res.object.exactAnswer;
 }
 
-export async function deepResearch({
-  query,
-  originalQuery,
-  breadth,
-  depth,
-  learnings = [],
-  visitedUrls = [],
-  onProgress,
-}: {
-  query: string;
-  originalQuery: string;
-  breadth: number;
-  depth: number;
-  learnings?: string[];
-  visitedUrls?: string[];
-  onProgress?: (progress: ResearchProgress) => void;
-}): Promise<ResearchResult> {
-  const progress: ResearchProgress = {
-    currentDepth: depth,
-    totalDepth: depth,
-    currentBreadth: breadth,
-    totalBreadth: breadth,
-    totalQueries: 0,
-    completedQueries: 0,
-  };
-
-  const reportProgress = (update: Partial<ResearchProgress>) => {
-    Object.assign(progress, update);
-    onProgress?.(progress);
-  };
-
-  const serpQueries = await generateSerpQueries({
+// Wrap the entire deepResearch function with tracing
+export const deepResearch = traceable(
+  async ({
     query,
     originalQuery,
-    learnings,
-    numQueries: breadth,
-  });
+    breadth,
+    depth,
+    learnings = [],
+    visitedUrls = [],
+    onProgress,
+  }: {
+    query: string;
+    originalQuery: string;
+    breadth: number;
+    depth: number;
+    learnings?: string[];
+    visitedUrls?: string[];
+    onProgress?: (progress: ResearchProgress) => void;
+  }): Promise<ResearchResult> => {
+    const progress: ResearchProgress = {
+      currentDepth: depth,
+      totalDepth: depth,
+      currentBreadth: breadth,
+      totalBreadth: breadth,
+      totalQueries: 0,
+      completedQueries: 0,
+    };
 
-  reportProgress({
-    totalQueries: serpQueries.length,
-    currentQuery: serpQueries[0]?.query,
-  });
+    const reportProgress = (update: Partial<ResearchProgress>) => {
+      Object.assign(progress, update);
+      onProgress?.(progress);
+    };
 
-  const limit = pLimit(ConcurrencyLimit);
+    const serpQueries = await generateSerpQueries({
+      query,
+      originalQuery,
+      learnings,
+      numQueries: breadth,
+    });
 
-  const results = await Promise.all(
-    serpQueries.map(serpQuery =>
-      limit(async () => {
-        try {
-          const result = await exa.searchAndContents(
-            serpQuery.query + ':',        // trailing colon = quick keyword search
-            {
-              type: 'keyword',            // or 'neural' if you prefer semantic
-              livecrawl: 'always',        // bypasses index & forces fresh crawl
-              text: true,                 // include full body text
-              numResults: 5,              // match former `limit: 5`
-            }
-          );
+    reportProgress({
+      totalQueries: serpQueries.length,
+      currentQuery: serpQueries[0]?.query,
+    });
 
-          // Collect URLs from this search
-          const newUrls = compact(result.results.map(r => r.url));
-          const newBreadth = Math.ceil(breadth / 2);
-          const newDepth = depth - 1;
+    const limit = pLimit(ConcurrencyLimit);
 
-          const newLearnings = await processSerpResult({
-            query: serpQuery.query,
-            originalQuery,
-            result,
-            numFollowUpQuestions: newBreadth,
-          });
-          const allLearnings = [...learnings, ...newLearnings.learnings];
-          const allUrls = [...visitedUrls, ...newUrls];
+    const results = await Promise.all(
+      serpQueries.map(serpQuery =>
+        limit(async () => {
+          try {
+            const result = await exa.searchAndContents(
+              serpQuery.query + ':',        // trailing colon = quick keyword search
+              {
+                type: 'keyword',            // or 'neural' if you prefer semantic
+                livecrawl: 'always',        // bypasses index & forces fresh crawl
+                text: true,                 // include full body text
+                numResults: 5,              // match former `limit: 5`
+              }
+            );
 
-          if (newDepth > 0) {
-            log(`Researching deeper, breadth: ${newBreadth}, depth: ${newDepth}`);
+            // Collect URLs from this search
+            const newUrls = compact(result.results.map(r => r.url));
+            const newBreadth = Math.ceil(breadth / 2);
+            const newDepth = depth - 1;
 
-            reportProgress({
-              currentDepth: newDepth,
-              currentBreadth: newBreadth,
-              completedQueries: progress.completedQueries + 1,
-              currentQuery: serpQuery.query,
-            });
-
-            const nextQuery = `
-            Previous research goal: ${serpQuery.researchGoal}
-            Follow-up research directions: ${newLearnings.followUpQuestions.map(q => `\n${q}`).join('')}
-          `.trim();
-
-            return deepResearch({
-              query: nextQuery,
+            const newLearnings = await processSerpResult({
+              query: serpQuery.query,
               originalQuery,
-              breadth: newBreadth,
-              depth: newDepth,
-              learnings: allLearnings,
-              visitedUrls: allUrls,
-              onProgress,
+              result,
+              numFollowUpQuestions: newBreadth,
             });
-          } else {
-            reportProgress({
-              currentDepth: 0,
-              completedQueries: progress.completedQueries + 1,
-              currentQuery: serpQuery.query,
-            });
+            const allLearnings = [...learnings, ...newLearnings.learnings];
+            const allUrls = [...visitedUrls, ...newUrls];
+
+            if (newDepth > 0) {
+              log(`Researching deeper, breadth: ${newBreadth}, depth: ${newDepth}`);
+
+              reportProgress({
+                currentDepth: newDepth,
+                currentBreadth: newBreadth,
+                completedQueries: progress.completedQueries + 1,
+                currentQuery: serpQuery.query,
+              });
+
+              const nextQuery = `
+              Previous research goal: ${serpQuery.researchGoal}
+              Follow-up research directions: ${newLearnings.followUpQuestions.map(q => `\n${q}`).join('')}
+            `.trim();
+
+              return deepResearch({
+                query: nextQuery,
+                originalQuery,
+                breadth: newBreadth,
+                depth: newDepth,
+                learnings: allLearnings,
+                visitedUrls: allUrls,
+                onProgress,
+              });
+            } else {
+              reportProgress({
+                currentDepth: 0,
+                completedQueries: progress.completedQueries + 1,
+                currentQuery: serpQuery.query,
+              });
+              return {
+                learnings: allLearnings,
+                visitedUrls: allUrls,
+              };
+            }
+          } catch (e: any) {
+            if (e.message && e.message.includes('Timeout')) {
+              log(`Timeout error running query: ${serpQuery.query}: `, e);
+            } else {
+              log(`Error running query: ${serpQuery.query}: `, e);
+            }
             return {
-              learnings: allLearnings,
-              visitedUrls: allUrls,
+              learnings: [],
+              visitedUrls: [],
             };
           }
-        } catch (e: any) {
-          if (e.message && e.message.includes('Timeout')) {
-            log(`Timeout error running query: ${serpQuery.query}: `, e);
-          } else {
-            log(`Error running query: ${serpQuery.query}: `, e);
-          }
-          return {
-            learnings: [],
-            visitedUrls: [],
-          };
-        }
-      }),
-    ),
-  );
+        }),
+      ),
+    );
 
-  return {
-    learnings: [...new Set(results.flatMap(r => r.learnings))],
-    visitedUrls: [...new Set(results.flatMap(r => r.visitedUrls))],
-  };
-}
+    return {
+      learnings: Array.from(new Set(results.flatMap(r => r.learnings))),
+      visitedUrls: Array.from(new Set(results.flatMap(r => r.visitedUrls))),
+    };
+  },
+  { name: 'research_pipeline', run_type: 'chain' }
+);
+
+// Wrap the writeFinalReport function with tracing
+export const tracedWriteFinalReport = traceable(
+  writeFinalReport,
+  { name: 'generate_report', run_type: 'chain' }
+);
+
+// Wrap the writeFinalAnswer function with tracing
+export const tracedWriteFinalAnswer = traceable(
+  writeFinalAnswer,
+  { name: 'generate_answer', run_type: 'chain' }
+);
