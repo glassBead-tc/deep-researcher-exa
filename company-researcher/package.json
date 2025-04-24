@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "cp .env.local ../deep-research/.env.local && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
+    "@openrouter/ai-sdk-provider": "^0.4.5",
     "@vercel/analytics": "^1.4.1",
     "ai": "^4.0.25",
     "clsx": "^2.1.1",
