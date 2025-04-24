@@ -28,7 +28,17 @@ export const synthesisSystemPrompt = () => {
   - Structure your report with clear sections including introduction, body, and conclusion.
   - Begin with the query and your answer, then present evidence supporting that answer.
   - Conclude by reinforcing your main argument based on the evidence presented.
-  - Focus on presenting the information clearly, logically, and persuasively.`;
+  - Focus on presenting the information clearly, logically, and persuasively.
+
+  Paragraph Structure Guidelines:
+  - Use proper paragraph breaks between distinct ideas or topics
+  - Each paragraph should focus on a single main point or concept
+  - Begin paragraphs with clear topic sentences that introduce the main idea
+  - Develop each paragraph with supporting evidence and analysis
+  - Keep paragraphs to a reasonable length (5-7 sentences maximum)
+  - Avoid creating "walls of text" by breaking up long sections into digestible paragraphs
+  - Use transitional phrases to create smooth connections between paragraphs
+  - Ensure each section has multiple paragraphs for better readability`;
 };
 
 /**
@@ -65,5 +75,14 @@ export const academicReportSystemPrompt = () => {
      - Provide reasoned justifications for your conclusions
      - Demonstrate depth of analysis rather than superficial summary
 
-  Your report should be comprehensive, persuasive, and academically rigorous, presenting a clear argument for your answer based on thorough analysis of the research findings.`;
+  5. Paragraph Structure:
+     - Use proper paragraph breaks between distinct ideas or topics
+     - Each paragraph should focus on a single main point or concept
+     - Begin paragraphs with clear topic sentences that introduce the main idea
+     - Develop each paragraph with supporting evidence and analysis
+     - Keep paragraphs to a reasonable length (5-7 sentences maximum)
+     - Avoid creating "walls of text" by breaking up long sections into digestible paragraphs
+     - Use transitional phrases to create smooth connections between paragraphs
+
+  Your report should be comprehensive, persuasive, and academically rigorous, presenting a clear argument for your answer based on thorough analysis of the research findings. Ensure the report is well-formatted with proper paragraph structure for optimal readability.`;
 };

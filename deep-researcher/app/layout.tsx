@@ -22,17 +22,17 @@ const reckless = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Company Researcher",
-  description: "Instantly get detailed research insights and know everything about any company inside out.",
+  title: "Deep Researcher",
+  description: "Instantly get detailed research insights on any topic with comprehensive analysis and synthesis.",
   openGraph: {
-    title: 'Company Researcher',
-    description: 'Instantly get detailed research insights and know everything about any company inside out.',
+    title: 'Deep Researcher',
+    description: 'Instantly get detailed research insights on any topic with comprehensive analysis and synthesis.',
     images: ['https://companyresearcher.exa.ai/opengraph-image.jpg'],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Company Researcher',
-    description: 'Instantly get detailed research insights and know everything about any company inside out.',
+    title: 'Deep Researcher',
+    description: 'Instantly get detailed research insights on any topic with comprehensive analysis and synthesis.',
     images: ['https://companyresearcher.exa.ai/opengraph-image.jpg'],
   },
 };

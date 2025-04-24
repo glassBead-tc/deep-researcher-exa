@@ -188,7 +188,7 @@ async function analyzeRelevancy(
       system: academicReportSystemPrompt(),
       prompt: trimPrompt(
         `Analyze the following learnings and rank them by relevance to the original query: "${originalQuery}". Return the learnings sorted from most relevant to least relevant.
-        
+
         <learnings>
         ${learnings.map((learning, index) => `${index + 1}. ${learning}`).join('\n')}
         </learnings>`,
@@ -228,7 +228,7 @@ async function deriveAnswerFromLearnings(
       system: academicReportSystemPrompt(),
       prompt: trimPrompt(
         `Based on the following learnings, derive a clear, concise answer to the original query: "${originalQuery}". The answer should be definitive and opinionated, taking a clear stance based on the evidence.
-        
+
         <learnings>
         ${learnings.map((learning, index) => `${index + 1}. ${learning}`).join('\n')}
         </learnings>`,
@@ -268,7 +268,7 @@ async function generateAcademicReportStructure(
       system: academicReportSystemPrompt(),
       prompt: trimPrompt(
         `Generate a structured outline for an academic report that answers the query: "${query}".
-        
+
         The report should:
         1. Start with the query and this answer: "${answer}"
         2. Present key findings as evidence supporting the answer
@@ -276,11 +276,20 @@ async function generateAcademicReportStructure(
         4. Reference sources (visited URLs)
         ${includeCounterarguments ? '5. Address potential counterarguments when relevant' : ''}
         6. Conclude with a summary reinforcing the main argument
-        
+
+        IMPORTANT STRUCTURE GUIDELINES:
+        - Create a clear introduction section that sets up the topic
+        - Divide the body into multiple distinct sections with clear headings
+        - Each section should focus on a specific aspect of the argument
+        - Plan for multiple paragraphs within each section
+        - Ensure logical flow between sections with clear transitions
+        - Include a dedicated counterarguments section when relevant
+        - End with a conclusion section that summarizes key points
+
         <relevant_learnings>
         ${relevantLearnings.map((learning, index) => `${index + 1}. ${learning}`).join('\n')}
         </relevant_learnings>
-        
+
         <visited_urls>
         ${visitedUrls.join('\n')}
         </visited_urls>`,
@@ -350,24 +359,32 @@ async function generateFormattedReport(
       system: academicReportSystemPrompt(),
       prompt: trimPrompt(
         `Generate a complete academic report based on the following structure. The report should:
-        
+
         1. Start with the query: "${query}" and the answer: "${answer}"
         2. Present key findings as evidence supporting the answer
         3. Academically argue for the chosen answer based on the evidence
         4. Reference sources appropriately
         5. Address potential counterarguments when relevant
         6. Conclude with a summary reinforcing the main argument
-        
+
         Use a ${tone} tone throughout the report. The report should be approximately ${maxLength} words.
-        
+
+        IMPORTANT FORMATTING INSTRUCTIONS:
+        - Use proper paragraph breaks between ideas
+        - Each paragraph should focus on a single main point or concept
+        - Ensure clear transitions between paragraphs
+        - Use appropriate section headings to organize content
+        - Maintain readability with paragraphs of reasonable length (5-7 sentences maximum)
+        - Do not create walls of text - break up long sections into digestible paragraphs
+
         <report_structure>
         ${JSON.stringify(reportStructure, null, 2)}
         </report_structure>
-        
+
         <relevant_learnings>
         ${relevantLearnings.map((learning, index) => `${index + 1}. ${learning}`).join('\n')}
         </relevant_learnings>
-        
+
         <visited_urls>
         ${visitedUrls.join('\n')}
         </visited_urls>`,
@@ -380,21 +397,38 @@ async function generateFormattedReport(
     return res.object.reportMarkdown;
   } catch (error) {
     console.error('Error generating formatted report:', error);
-    
+
     // Generate a basic report if there's an error
     let basicReport = `# Research Report: ${query}\n\n`;
     basicReport += `## Answer\n\n${answer}\n\n`;
+    basicReport += `## Introduction\n\n`;
+    basicReport += `This report examines the query: "${query}". Based on our research, we have determined that ${answer}\n\n`;
+
     basicReport += `## Key Findings\n\n`;
-    
+
     for (let i = 0; i < Math.min(relevantLearnings.length, 5); i++) {
       basicReport += `- ${relevantLearnings[i]}\n`;
     }
-    
-    basicReport += `\n## Sources\n\n`;
+
+    basicReport += `\n## Analysis\n\n`;
+
+    // Create paragraphs from learnings
+    if (relevantLearnings.length > 0) {
+      // Group learnings into 2-3 per paragraph
+      for (let i = 0; i < Math.min(relevantLearnings.length, 10); i += 3) {
+        const paragraphLearnings = relevantLearnings.slice(i, i + 3);
+        basicReport += paragraphLearnings.join(' ') + '\n\n';
+      }
+    }
+
+    basicReport += `## Conclusion\n\n`;
+    basicReport += `In conclusion, ${answer} This conclusion is supported by the evidence presented in this report.\n\n`;
+
+    basicReport += `## Sources\n\n`;
     for (const url of visitedUrls) {
       basicReport += `- ${url}\n`;
     }
-    
+
     return basicReport;
   }
 }
@@ -410,13 +444,13 @@ export const writeFinalReport = traceable(
     request: ReportGenerationRequest
   ): Promise<ReportGenerationResult> => {
     const { prompt, originalQuery, learnings, visitedUrls, options = {} } = request;
-    
+
     // Step 1: Analyze relevancy of learnings
     const relevantLearnings = await analyzeRelevancy(learnings, originalQuery);
-    
+
     // Step 2: Derive an answer from the learnings
     const answer = await deriveAnswerFromLearnings(relevantLearnings.slice(0, 10), originalQuery);
-    
+
     // Step 3: Generate the report structure
     const reportStructure = await generateAcademicReportStructure(
       originalQuery,
@@ -425,7 +459,7 @@ export const writeFinalReport = traceable(
       visitedUrls,
       options.includeCounterarguments
     );
-    
+
     // Step 4: Generate the formatted report
     const report = await generateFormattedReport(
       originalQuery,
@@ -435,14 +469,14 @@ export const writeFinalReport = traceable(
       visitedUrls,
       options
     );
-    
+
     // Step 5: Append the visited URLs section if not already included
     let finalReport = report;
     if (!report.includes('## Sources') && !report.includes('## References')) {
       const urlsSection = `\n\n## Sources\n\n${visitedUrls.map(url => `- ${url}`).join('\n')}`;
       finalReport = report + urlsSection;
     }
-    
+
     // Step 6: Return the complete report generation result
     return {
       reportMarkdown: finalReport,

@@ -1,6 +1,5 @@
 import * as fs from 'fs/promises';
 import * as readline from 'readline';
-
 import { getModel } from './ai/providers';
 import {
   deepResearch,
@@ -105,7 +104,7 @@ ${followUpQuestions.map((q: string, i: number) => `Q: ${q}\nA: ${answers[i]}`).j
       visitedUrls,
     });
 
-    await fs.writeFile('report.md', report, 'utf-8');
+    await fs.writeFile('report.md', report.reportMarkdown, 'utf-8');
     console.log(`\n\nFinal Report:\n\n${report}`);
     console.log('\nReport has been saved to report.md');
   } else {
