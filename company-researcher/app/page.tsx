@@ -9,7 +9,7 @@ export default function Home() {
   const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [displayMode, setDisplayMode] = useState<'report' | 'answer'>('report');
+  const [displayMode, setDisplayMode] = useState<'report' | 'answer' | 'synthesis'>('report');
 
   const handleSearch = async () => {
     setIsLoading(true);
@@ -81,6 +81,12 @@ export default function Home() {
                 Report
               </button>
               <button
+                onClick={() => setDisplayMode('synthesis')}
+                className={`mr-2 p-2 rounded ${displayMode === 'synthesis' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black'}`}
+              >
+                Synthesis
+              </button>
+              <button
                 onClick={() => setDisplayMode('answer')}
                 className={`p-2 rounded ${displayMode === 'answer' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black'}`}
               >
@@ -114,6 +120,15 @@ export default function Home() {
               <div>
                 <h2 className="text-xl font-bold mb-2">Answer:</h2>
                 <p>{researchResult.answer}</p>
+              </div>
+            )}
+
+            {displayMode === 'synthesis' && (
+              <div>
+                <h2 className="text-xl font-bold mb-2">Synthesized Learnings:</h2>
+                <div className="prose max-w-none">
+                  {researchResult.synthesis}
+                </div>
               </div>
             )}
           </div>

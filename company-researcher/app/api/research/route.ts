@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
-import { deepResearch } from '../../../../deep-research/src/deep-research';
+import { deepResearch } from '@/lib/deep-research/deep-research';
+import { synthesizeLearnings } from '@/lib/synthesis/synthesisAgent';
+import { writeFinalAnswer } from '@/lib/deep-research/deep-research';
 
 export type ResearchResult = {
   answer: string;
+  synthesis: string;
   learnings: string[];
   visitedUrls: string[];
 };
-
-import { writeFinalAnswer } from '../../../../deep-research/src/deep-research';
 
 export async function POST(request: Request) {
   try {
@@ -30,8 +31,31 @@ export async function POST(request: Request) {
       });
       console.log('Answer generated successfully');
 
+      // Generate a synthesized version of the learnings
+      console.log('Generating synthesis of learnings...');
+      // Determine if we need to use batching based on array size
+      const learningsCount = deepResearchResult.learnings.length;
+      console.log(`Processing ${learningsCount} learnings for synthesis`);
+      
+      const synthesisOptions = {
+        tone: 'informative' as const, // Use const assertion to fix type
+        // Use a smaller batch size for very large arrays
+        ...(learningsCount > 50 ? {
+          batchSize: 30,
+          maxLength: 1000 // Limit length for large batches
+        } : {})
+      };
+      
+      const synthesis = await synthesizeLearnings(
+        deepResearchResult.learnings,
+        query,
+        synthesisOptions
+      );
+      console.log('Synthesis generated successfully');
+
       const researchResult = {
         answer,
+        synthesis,
         learnings: deepResearchResult.learnings,
         visitedUrls: deepResearchResult.visitedUrls,
       };
