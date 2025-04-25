@@ -14,6 +14,15 @@ export default function Home() {
   const [displayMode, setDisplayMode] = useState<'report' | 'answer' | 'synthesis'>('report');
   const [researchStage, setResearchStage] = useState<ResearchStage>('querying');
 
+  const handleReset = () => {
+    setQuery('');
+    setResearchResult(null);
+    setError(null);
+    setDisplayMode('report');
+    // Optionally scroll to search input
+    document.querySelector('input[type="text"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const handleSearch = async () => {
     setIsLoading(true);
     setError(null);
@@ -77,7 +86,12 @@ export default function Home() {
                   <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
               </div>
-              <h1 className="ml-3 text-2xl font-bold text-gray-900">Deep Researcher</h1>
+              <h1 
+                onClick={handleReset}
+                className="ml-3 text-2xl font-bold text-gray-900 hover:text-brand-default cursor-pointer transition-colors"
+              >
+                Deep Researcher
+              </h1>
             </div>
             <div className="flex items-center text-sm text-gray-500">
               Powered by
